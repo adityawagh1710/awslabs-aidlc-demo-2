@@ -1,0 +1,38 @@
+package middleware
+
+import (
+	"context"
+	"strings"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
+)
+
+type Claims struct {
+	UserID string `json:"user_id"`
+	jwt.RegisteredClaims
+}
+
+func JWTAuth(secret string, rdb *redis.Client) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		header := c.Get("Authorization")
+		if !strings.HasPrefix(header, "Bearer ") {
+			return fiber.ErrUnauthorized
+		}
+		tokenStr := strings.TrimPrefix(header, "Bearer ")
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(_ *jwt.Token) (interface{}, error) {
+			return []byte(secret), nil
+		})
+		if err != nil || !token.Valid {
+			return fiber.ErrUnauthorized
+		}
+		blacklisted, err := rdb.Exists(context.Background(), "blacklist:"+tokenStr).Result()
+		if err != nil || blacklisted > 0 {
+			return fiber.ErrUnauthorized
+		}
+		c.Locals("userID", claims.UserID)
+		return c.Next()
+	}
+}

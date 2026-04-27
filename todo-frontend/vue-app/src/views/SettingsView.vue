@@ -1,0 +1,114 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { ShieldCheckIcon, UserCircleIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import AppSpinner from '@/components/ui/AppSpinner.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useNotifStore } from '@/stores/notifications'
+import { authApi } from '@/api/auth'
+
+const auth  = useAuthStore()
+const notif = useNotifStore()
+
+const mfaLoading = ref(false)
+const mfaQR      = ref('')
+const mfaSecret  = ref('')
+const mfaCode    = ref('')
+const mfaStep    = ref<'idle' | 'scan' | 'done'>('idle')
+
+async function startMfa() {
+  mfaLoading.value = true
+  try {
+    const { data } = await authApi.enrollMfa()
+    mfaQR.value     = data.qr_url
+    mfaSecret.value = data.secret
+    mfaStep.value   = 'scan'
+  } catch { notif.error('Could not start MFA setup') }
+  finally { mfaLoading.value = false }
+}
+
+async function verifyMfa() {
+  if (mfaCode.value.length !== 6) return
+  mfaLoading.value = true
+  try {
+    await authApi.verifyMfa(mfaCode.value)
+    mfaStep.value = 'done'
+    notif.success('MFA enabled successfully!')
+  } catch { notif.error('Invalid code. Please try again.') }
+  finally { mfaLoading.value = false }
+}
+</script>
+
+<template>
+  <AppLayout>
+    <div class="p-8 max-w-2xl mx-auto w-full">
+      <h1 class="text-2xl font-bold text-slate-800 mb-6">Settings</h1>
+
+      <!-- Profile section -->
+      <section class="card mb-4">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+          <UserCircleIcon class="w-5 h-5 text-slate-400" />
+          <h2 class="text-sm font-semibold text-slate-700">Profile</h2>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+          <div>
+            <label class="label">Email</label>
+            <input :value="auth.user?.email" type="email" class="input" disabled />
+          </div>
+        </div>
+      </section>
+
+      <!-- MFA section -->
+      <section class="card">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+          <ShieldCheckIcon class="w-5 h-5 text-slate-400" />
+          <h2 class="text-sm font-semibold text-slate-700">Two-factor authentication</h2>
+        </div>
+        <div class="px-6 py-5">
+
+          <!-- Idle -->
+          <div v-if="mfaStep === 'idle'">
+            <p class="text-sm text-slate-500 mb-4">
+              Add an extra layer of security by enabling TOTP-based 2FA.
+            </p>
+            <button @click="startMfa" class="btn-md btn-secondary" :disabled="mfaLoading">
+              <AppSpinner v-if="mfaLoading" size="sm" />
+              <QrCodeIcon v-else class="w-4 h-4" />
+              Enable 2FA
+            </button>
+          </div>
+
+          <!-- QR scan step -->
+          <div v-else-if="mfaStep === 'scan'" class="space-y-4">
+            <p class="text-sm text-slate-600">
+              Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code below.
+            </p>
+            <div class="flex justify-center">
+              <img :src="mfaQR" alt="MFA QR code" class="w-40 h-40 rounded-xl border border-slate-200 p-2" />
+            </div>
+            <p class="text-xs text-slate-400 text-center break-all">Manual key: {{ mfaSecret }}</p>
+            <div>
+              <label class="label">Verification code</label>
+              <input v-model="mfaCode" type="text" inputmode="numeric" maxlength="6"
+                class="input text-center text-xl tracking-[0.4em] font-mono" placeholder="000000" />
+            </div>
+            <button @click="verifyMfa" class="btn-md btn-primary w-full" :disabled="mfaLoading || mfaCode.length !== 6">
+              <AppSpinner v-if="mfaLoading" size="sm" />
+              Verify & activate
+            </button>
+          </div>
+
+          <!-- Done -->
+          <div v-else class="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-100">
+            <ShieldCheckIcon class="w-6 h-6 text-green-600 shrink-0" />
+            <div>
+              <p class="text-sm font-semibold text-green-800">2FA is enabled</p>
+              <p class="text-xs text-green-600">Your account is protected with TOTP authentication.</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </AppLayout>
+</template>

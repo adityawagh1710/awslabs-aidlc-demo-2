@@ -1,0 +1,9 @@
+go 1.23.0
+
+use (
+	./auth-service
+	./file-service
+	./notification-service
+	./scheduler-service
+	./todo-service
+)

@@ -1,0 +1,28 @@
+name: file-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "file-service/**"
+      - ".github/workflows/file-service.yml"
+      - ".github/workflows/_go-service.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "file-service/**"
+      - ".github/workflows/file-service.yml"
+      - ".github/workflows/_go-service.yml"
+
+jobs:
+  ci:
+    uses: ./.github/workflows/_go-service.yml
+    with:
+      service: file-service
+      image: todo-file-service
+      port: "3002"
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}

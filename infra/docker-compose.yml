@@ -1,0 +1,223 @@
+name: todo-infra-go
+
+services:
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/certs
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - todo-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - todo-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - todo-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - todo-network
+
+  backend:
+    build:
+      context: ../todo-backend
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_MIGRATIONS_DB_URL: ${DATABASE_URL}&x-migrations-table=auth_migrations
+      TODO_MIGRATIONS_DB_URL: ${DATABASE_URL}&x-migrations-table=todo_migrations
+      FILE_MIGRATIONS_DB_URL: ${DATABASE_URL}&x-migrations-table=file_migrations
+      NOTIFICATION_MIGRATIONS_DB_URL: ${DATABASE_URL}&x-migrations-table=notification_migrations
+      SCHEDULER_MIGRATIONS_DB_URL: ${DATABASE_URL}&x-migrations-table=scheduler_migrations
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: ${REDIS_URL}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      FILE_STORAGE_PATH: /uploads
+      FILE_SERVICE_URL: http://localhost:3002
+      TODO_SERVICE_URL: http://localhost:3001
+      NOTIFICATION_SERVICE_URL: http://localhost:3003
+      SCHEDULER_SERVICE_URL: http://localhost:3004
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - file-uploads:/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health && wget -qO- http://localhost:3001/health && wget -qO- http://localhost:3002/health && wget -qO- http://localhost:3003/health && wget -qO- http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      # --- auth-service (strip /api prefix before forwarding) ---
+      - "traefik.http.routers.auth.rule=PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.auth.entrypoints=web"
+      - "traefik.http.routers.auth.service=auth"
+      - "traefik.http.routers.auth.middlewares=strip-api"
+      - "traefik.http.services.auth.loadbalancer.server.port=3000"
+      # --- todo-service ---
+      - "traefik.http.routers.todo.rule=PathPrefix(`/api/todos`) || PathPrefix(`/api/tags`)"
+      - "traefik.http.routers.todo.entrypoints=web"
+      - "traefik.http.routers.todo.service=todo"
+      - "traefik.http.routers.todo.middlewares=strip-api"
+      - "traefik.http.services.todo.loadbalancer.server.port=3001"
+      # --- file-service ---
+      - "traefik.http.routers.files.rule=PathPrefix(`/api/files`)"
+      - "traefik.http.routers.files.entrypoints=web"
+      - "traefik.http.routers.files.service=files"
+      - "traefik.http.routers.files.middlewares=strip-api"
+      - "traefik.http.services.files.loadbalancer.server.port=3002"
+      # --- websocket (no /api prefix — SPA never routes to /ws) ---
+      - "traefik.http.routers.ws.rule=PathPrefix(`/ws`)"
+      - "traefik.http.routers.ws.entrypoints=web"
+      - "traefik.http.routers.ws.service=ws"
+      - "traefik.http.services.ws.loadbalancer.server.port=3003"
+      # --- middleware: strip /api prefix so backends see original paths ---
+      - "traefik.http.middlewares.strip-api.stripprefix.prefixes=/api"
+    networks:
+      - todo-network
+
+  frontend:
+    build:
+      context: ../todo-frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.routers.frontend.service=frontend"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    networks:
+      - todo-network
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=90d"
+    networks:
+      - todo-network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - todo-network
+
+  # --- Automatic Docker cleanup (runs daily at 3 AM) ---
+  docker-cleanup:
+    image: docker:cli
+    container_name: docker-cleanup
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          sleep 86400
+          echo "[cleanup] Pruning unused images and build cache..."
+          docker image prune -af --filter "until=48h"
+          docker builder prune -f --filter "until=48h"
+          docker container prune -f
+          echo "[cleanup] Done."
+        done
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - todo-network
+
+volumes:
+  postgres-data:
+  redis-data:
+  es-data:
+  file-uploads:
+  traefik-certs:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  todo-network:
+    name: todo-network
