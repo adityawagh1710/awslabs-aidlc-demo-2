@@ -1,5 +1,5 @@
 # Build stage: build all 5 service binaries via the Go workspace.
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /src
 
 COPY go.work ./
