@@ -30,13 +30,24 @@ jobs:
           cache-dependency-path: todo-backend/*/go.sum
 
       - name: Download modules
-        run: go work sync && go mod download -x
+        run: |
+          for svc in auth-service todo-service file-service notification-service scheduler-service; do
+            (cd $svc && go mod download)
+          done
 
       - name: Vet all services
-        run: go vet ./...
+        run: |
+          for svc in auth-service todo-service file-service notification-service scheduler-service; do
+            echo "=== vet $svc ==="
+            (cd $svc && go vet ./...)
+          done
 
       - name: Unit & integration tests (with race detector)
-        run: go test -race ./... -timeout 180s -coverprofile=coverage.txt -covermode=atomic
+        run: |
+          for svc in auth-service todo-service file-service notification-service scheduler-service; do
+            echo "=== test $svc ==="
+            (cd $svc && go test -race ./... -timeout 180s -coverprofile=coverage.txt -covermode=atomic)
+          done
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
           TESTCONTAINERS_RYUK_DISABLED: "false"
@@ -45,13 +56,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-backend
-          path: todo-backend/coverage.txt
+          path: todo-backend/*/coverage.txt
           retention-days: 7
 
       - name: Vulnerability scan (govulncheck)
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          for svc in auth-service todo-service file-service notification-service scheduler-service; do
+            echo "=== govulncheck $svc ==="
+            (cd $svc && govulncheck ./...)
+          done
 
   # ── Build & push image ─────────────────────────────────────────────────────
   build:
