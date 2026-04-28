@@ -294,6 +294,35 @@ docker exec frontend wget -qO- http://localhost/             # SPA index.html
 
 ---
 
+## Exposed Ports
+
+| Service | Host Port | Purpose |
+|---|---|---|
+| Frontend (nginx) | `8081` | Vue SPA + API proxy |
+| Traefik | `8080` | API gateway |
+| PostgreSQL | `5433` | Database (DBeaver, pgAdmin, etc.) |
+| Grafana | `3000` | Dashboards & monitoring |
+
+### Connecting DBeaver to PostgreSQL
+
+| Setting | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5433` |
+| Database | `todo_app` |
+| Username | `todo_user` |
+| Password | `StrongPass123!` (or your `.env` value) |
+
+### Accessing Grafana
+
+Open `http://localhost:3000` and log in with:
+- Username: `admin`
+- Password: `GrafanaPass123!` (or your `.env` `GRAFANA_ADMIN_PASSWORD` value)
+
+Prometheus is pre-configured as a datasource.
+
+---
+
 ## Local Development
 
 ### Building a service
@@ -437,14 +466,14 @@ Requires the full Docker stack running on port 8081.
 
 ```bash
 cd todo-frontend/vue-app
-npx cypress run --browser electron --headless
+./node_modules/.bin/cypress run
 ```
 
-Two spec files:
+Four spec files:
 - `auth_flows.cy.js` — login, wrong password rejection, client-side validation
 - `auth_refresh.cy.js` — sessionStorage persistence across reload, logout on session clear
-
-> **Note:** The backend rate-limits `/auth/register` to 10 req/hr. If tests fail with 429s, flush Redis: `docker exec redis redis-cli -a <password> DEL "ratelimit:172.19.0.9:/auth/register"`
+- `tag_management.cy.js` — open tag panel, create/delete tags, create todo with tag
+- `todo_filters.cy.js` — filter by status/priority, search, clear filters, empty state
 
 ### Vulnerability scan
 
