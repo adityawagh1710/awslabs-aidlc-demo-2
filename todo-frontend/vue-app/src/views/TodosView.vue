@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   PlusIcon, MagnifyingGlassIcon, XMarkIcon,
-  InboxIcon, TagIcon, ArrowsUpDownIcon,
+  InboxIcon, TagIcon,
 } from '@heroicons/vue/24/outline'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
