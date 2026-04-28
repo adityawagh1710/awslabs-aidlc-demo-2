@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -68,14 +69,19 @@ func main() {
 	// Fiber app — trust X-Real-IP / X-Forwarded-For set by nginx / Traefik
 	// so c.IP() returns the real client address, not the proxy container IP.
 	app := fiber.New(fiber.Config{
-		ErrorHandler:          middleware.ErrorHandler,
-		ProxyHeader:           "X-Real-IP",
+		ErrorHandler:            middleware.ErrorHandler,
+		ProxyHeader:             "X-Real-IP",
 		EnableTrustedProxyCheck: true,
-		TrustedProxies:        []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+		TrustedProxies:          []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
 	})
 	app.Use(middleware.RequestLogger())
 	app.Use(middleware.RateLimiter(rdb))
 	app.Use(middleware.Recover())
+
+	// Prometheus metrics
+	prometheus := fiberprometheus.New("auth-service")
+	prometheus.RegisterAt(app, "/metrics")
+	app.Use(prometheus.Middleware)
 
 	// Routes
 	app.Get("/health", healthHandler.Health)

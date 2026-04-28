@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-migrate/migrate/v4"
@@ -75,6 +76,10 @@ func main() {
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	app.Use(middleware.RequestLogger())
 	app.Use(middleware.Recover())
+
+	prometheus := fiberprometheus.New("todo-service")
+	prometheus.RegisterAt(app, "/metrics")
+	app.Use(prometheus.Middleware)
 
 	jwtMW := middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb)
 	app.Get("/health", healthH.Health)

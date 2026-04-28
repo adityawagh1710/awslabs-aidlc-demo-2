@@ -302,6 +302,7 @@ docker exec frontend wget -qO- http://localhost/             # SPA index.html
 | Traefik | `8080` | API gateway |
 | PostgreSQL | `5433` | Database (DBeaver, pgAdmin, etc.) |
 | Grafana | `3000` | Dashboards & monitoring |
+| Prometheus | `9090` | Metrics query & targets |
 
 ### Connecting DBeaver to PostgreSQL
 
@@ -320,6 +321,10 @@ Open `http://localhost:3000` and log in with:
 - Password: `GrafanaPass123!` (or your `.env` `GRAFANA_ADMIN_PASSWORD` value)
 
 Prometheus is pre-configured as a datasource.
+
+### Accessing Prometheus
+
+Open `http://localhost:9090` to query metrics directly. All 5 backend services expose `/metrics` via `fiberprometheus` and are scraped every 15s.
 
 ---
 
@@ -508,20 +513,30 @@ Security Baseline extension is **enabled** — all SECURITY-01 through SECURITY-
 
 ## Observability
 
-**Prometheus** scrapes metrics from all services every 15s (`GET /metrics`).
+All 5 Go services expose Prometheus metrics at `/metrics` via `fiberprometheus`.
 
-**Grafana** provides pre-provisioned dashboards for:
-- Per-service HTTP request rate, latency (p50/p95/p99), error rate
-- PostgreSQL connection pool stats
-- Redis hit/miss ratio
-- Elasticsearch indexing rate
+**Prometheus** (`http://localhost:9090`) scrapes all services every 15s.
 
-**Alerts configured:**
-- Authentication failure spikes
-- p95 latency > 500 ms
-- Error rate > 1%
+**Grafana** (`http://localhost:3000`) comes with a pre-provisioned dashboard — "Todo App — Services Overview" — containing 8 panels:
 
-**Logs:** zerolog JSON to stdout on all services. Docker log driver `json-file` with `max-size: 100m`, `max-file: 5`. Minimum 90-day retention (host-level archival required).
+| Panel | Description |
+|---|---|
+| Request Rate | Requests/sec per service (excludes /health, /metrics) |
+| Error Rate | 4xx + 5xx responses per service |
+| p95 Latency | 95th percentile response time per service |
+| p50 Latency | Median response time per service |
+| Requests In Progress | Active concurrent requests |
+| Goroutines | Go goroutine count per service |
+| Heap Memory | Allocated heap bytes per service |
+| Requests by Status Code | Donut chart of response codes |
+
+Available PromQL metrics:
+- `http_requests_total` — counter by `job`, `method`, `status_code`, `path`
+- `http_request_duration_seconds` — histogram (use `histogram_quantile` for percentiles)
+- `http_requests_in_progress_total` — gauge
+- `go_goroutines`, `go_memstats_alloc_bytes` — Go runtime
+
+**Logs:** zerolog JSON to stdout on all services. Docker log driver `json-file` with `max-size: 100m`, `max-file: 5`.
 
 ---
 

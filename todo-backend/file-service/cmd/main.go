@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -54,10 +55,15 @@ func main() {
 	healthH := handler.NewHealthHandler()
 
 	app := fiber.New(fiber.Config{
-		ErrorHandler:  middleware.ErrorHandler,
-		BodyLimit:     11 * 1024 * 1024, // 11MB to allow rejection at service layer
+		ErrorHandler: middleware.ErrorHandler,
+		BodyLimit:    11 * 1024 * 1024, // 11MB to allow rejection at service layer
 	})
 	app.Use(middleware.Recover())
+
+	prom := fiberprometheus.New("file-service")
+	prom.RegisterAt(app, "/metrics")
+	app.Use(prom.Middleware)
+
 	jwtMW := middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb)
 
 	app.Get("/health", healthH.Health)

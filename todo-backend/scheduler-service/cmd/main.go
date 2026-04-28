@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -59,6 +60,11 @@ func main() {
 
 	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler})
 	app.Use(middleware.Recover())
+
+	prom := fiberprometheus.New("scheduler-service")
+	prom.RegisterAt(app, "/metrics")
+	app.Use(prom.Middleware)
+
 	app.Get("/health", healthH.Health)
 	app.Post("/reminders", apiKey, h.CreateReminder)
 	app.Delete("/reminders/:id", apiKey, h.DeleteReminder)
