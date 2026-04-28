@@ -58,9 +58,9 @@ async function logout() {
     <div class="px-3 pb-4">
       <div class="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-50">
         <div class="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 text-xs font-bold uppercase">
-          {{ auth.user?.email?.[0] ?? '?' }}
+          {{ auth.email?.[0] ?? '?' }}
         </div>
-        <p class="text-xs font-medium text-slate-600 truncate">{{ auth.user?.email ?? 'User' }}</p>
+        <p class="text-xs font-medium text-slate-600 truncate">{{ auth.email || 'User' }}</p>
       </div>
     </div>
   </aside>

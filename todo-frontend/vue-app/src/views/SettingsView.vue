@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ShieldCheckIcon, UserCircleIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import QRCode from 'qrcode'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -11,17 +12,18 @@ const auth  = useAuthStore()
 const notif = useNotifStore()
 
 const mfaLoading = ref(false)
-const mfaQR      = ref('')
+const mfaQRData  = ref('')   // data:image/png;base64 URI
 const mfaSecret  = ref('')
 const mfaCode    = ref('')
-const mfaStep    = ref<'idle' | 'scan' | 'done'>('idle')
+const mfaStep    = ref<'idle' | 'scan' | 'done'>(auth.mfaEnabled ? 'done' : 'idle')
 
 async function startMfa() {
   mfaLoading.value = true
   try {
     const { data } = await authApi.enrollMfa()
-    mfaQR.value     = data.qr_url
     mfaSecret.value = data.secret
+    // Generate QR code image from the otpauth:// URI
+    mfaQRData.value = await QRCode.toDataURL(data.qr_url, { width: 200, margin: 2 })
     mfaStep.value   = 'scan'
   } catch { notif.error('Could not start MFA setup') }
   finally { mfaLoading.value = false }
@@ -33,6 +35,7 @@ async function verifyMfa() {
   try {
     await authApi.verifyMfa(mfaCode.value)
     mfaStep.value = 'done'
+    auth.setMfaEnabled(true)
     notif.success('MFA enabled successfully!')
   } catch { notif.error('Invalid code. Please try again.') }
   finally { mfaLoading.value = false }
@@ -53,7 +56,7 @@ async function verifyMfa() {
         <div class="px-6 py-5 space-y-3">
           <div>
             <label class="label">Email</label>
-            <input :value="auth.user?.email" type="email" class="input" disabled />
+            <input :value="auth.email" type="email" class="input" disabled />
           </div>
         </div>
       </section>
@@ -84,13 +87,17 @@ async function verifyMfa() {
               Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code below.
             </p>
             <div class="flex justify-center">
-              <img :src="mfaQR" alt="MFA QR code" class="w-40 h-40 rounded-xl border border-slate-200 p-2" />
+              <img v-if="mfaQRData" :src="mfaQRData" alt="MFA QR code" class="w-48 h-48 rounded-xl border border-slate-200 p-2" />
+              <div v-else class="w-48 h-48 rounded-xl border border-slate-200 flex items-center justify-center">
+                <AppSpinner size="lg" />
+              </div>
             </div>
             <p class="text-xs text-slate-400 text-center break-all">Manual key: {{ mfaSecret }}</p>
             <div>
               <label class="label">Verification code</label>
               <input v-model="mfaCode" type="text" inputmode="numeric" maxlength="6"
-                class="input text-center text-xl tracking-[0.4em] font-mono" placeholder="000000" />
+                class="input text-center text-xl tracking-[0.4em] font-mono" placeholder="000000"
+                @keyup.enter="verifyMfa" />
             </div>
             <button @click="verifyMfa" class="btn-md btn-primary w-full" :disabled="mfaLoading || mfaCode.length !== 6">
               <AppSpinner v-if="mfaLoading" size="sm" />

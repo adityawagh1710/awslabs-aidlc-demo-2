@@ -1,3 +1,4 @@
+# Grafana datasource provisioning config.
 apiVersion: 1
 datasources:
   - name: Prometheus
