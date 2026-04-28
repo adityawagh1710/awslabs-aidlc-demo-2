@@ -16,9 +16,10 @@ const error   = ref('')
 
 async function submit() {
   if (code.value.length !== 6) { error.value = 'Enter the 6-digit code from your authenticator app.'; return }
+  if (!auth.pendingEmail) { error.value = 'Session expired. Please go back and log in again.'; return }
   loading.value = true; error.value = ''
   try {
-    await auth.login('', '', code.value)
+    await auth.completeMfa(code.value)
     notif.success('Authenticated!')
     router.push('/todos')
   } catch {
@@ -50,6 +51,10 @@ async function submit() {
             <span>Verify</span>
           </button>
         </form>
+
+        <button @click="router.push('/login')" class="text-sm text-slate-500 hover:text-slate-700 mt-4 mx-auto block">
+          ← Back to login
+        </button>
       </div>
     </div>
   </div>

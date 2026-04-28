@@ -20,7 +20,12 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		case fiber.StatusNotFound:
 			msg = "not found"
 		case fiber.StatusUnprocessableEntity:
-			msg = "validation error"
+			// Preserve specific messages like "mfa_required"
+			if e.Message != "" && e.Message != "Unprocessable Entity" {
+				msg = e.Message
+			} else {
+				msg = "validation error"
+			}
 		case fiber.StatusTooManyRequests:
 			msg = "too many requests"
 		}
