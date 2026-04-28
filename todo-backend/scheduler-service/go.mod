@@ -1,6 +1,6 @@
 module github.com/todo-app/scheduler-service
 
-go 1.26.2
+go 1.26.1
 
 require (
 	github.com/go-playground/validator/v10 v10.22.0

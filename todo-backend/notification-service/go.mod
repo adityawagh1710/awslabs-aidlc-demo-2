@@ -1,6 +1,6 @@
 module github.com/todo-app/notification-service
 
-go 1.26.2
+go 1.26.1
 
 require (
 	github.com/gofiber/contrib/websocket v1.3.2

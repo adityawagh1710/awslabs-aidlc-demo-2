@@ -1,6 +1,6 @@
 module github.com/todo-app/auth-service
 
-go 1.26.2
+go 1.26.1
 
 require (
 	github.com/alexedwards/argon2id v1.0.0

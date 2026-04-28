@@ -1,6 +1,6 @@
 module github.com/todo-app/file-service
 
-go 1.26.2
+go 1.26.1
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.12
