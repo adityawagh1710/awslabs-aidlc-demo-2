@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   PlusIcon, MagnifyingGlassIcon, XMarkIcon,
-  InboxIcon, TagIcon,
+  InboxIcon, TagIcon, ArrowsUpDownIcon,
 } from '@heroicons/vue/24/outline'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
@@ -10,30 +10,59 @@ import TodoCard from '@/components/todo/TodoCard.vue'
 import CreateTodoModal from '@/components/todo/CreateTodoModal.vue'
 import { useTodosStore } from '@/stores/todos'
 import { useNotifStore } from '@/stores/notifications'
+import { useAuthStore } from '@/stores/auth'
 import type { Status, Priority } from '@/api/todos'
 
 const store = useTodosStore()
 const notif = useNotifStore()
+const auth  = useAuthStore()
 
-const showCreate  = ref(false)
-const searchQ     = ref('')
+const showCreate     = ref(false)
+const searchQ        = ref('')
 const filterStatus   = ref<Status | ''>('')
 const filterPriority = ref<Priority | ''>('')
-const showTagMgr  = ref(false)
-const newTagName  = ref('')
+const showTagMgr     = ref(false)
+const newTagName     = ref('')
+const sortBy         = ref<'newest' | 'oldest' | 'priority'>('newest')
 
 onMounted(async () => {
   await Promise.all([store.fetchTodos(), store.fetchTags()])
+  window.addEventListener('keydown', handleKey)
+})
+onUnmounted(() => window.removeEventListener('keydown', handleKey))
+
+function handleKey(e: KeyboardEvent) {
+  // 'N' opens new task modal (unless typing in an input)
+  if (e.key === 'n' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) {
+    e.preventDefault()
+    showCreate.value = true
+  }
+}
+
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  const name = auth.email?.split('@')[0] || 'there'
+  if (h < 12) return `Good morning, ${name}`
+  if (h < 17) return `Good afternoon, ${name}`
+  return `Good evening, ${name}`
 })
 
+const priorityOrder = { high: 0, medium: 1, low: 2 }
+
 const visibleTodos = computed(() => {
-  let list = store.todos
+  let list = [...store.todos]
   if (searchQ.value) {
     const q = searchQ.value.toLowerCase()
     list = list.filter(t => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))
   }
   if (filterStatus.value)   list = list.filter(t => t.status   === filterStatus.value)
   if (filterPriority.value) list = list.filter(t => t.priority === filterPriority.value)
+
+  // Sort
+  if (sortBy.value === 'newest') list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  else if (sortBy.value === 'oldest') list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  else if (sortBy.value === 'priority') list.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
+
   return list
 })
 
@@ -43,6 +72,10 @@ const stats = computed(() => ({
   in_progress: store.todos.filter(t => t.status === 'in_progress').length,
   done:        store.todos.filter(t => t.status === 'done').length,
 }))
+
+function filterByStatus(status: Status) {
+  filterStatus.value = filterStatus.value === status ? '' : status
+}
 
 async function handleComplete(id: string) {
   const todo = store.todos.find(t => t.id === id)
@@ -87,10 +120,10 @@ const hasFilters = computed(() => searchQ.value || filterStatus.value || filterP
   <AppLayout>
     <div class="p-8 max-w-4xl mx-auto w-full">
 
-      <!-- Header -->
+      <!-- Header with greeting -->
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-2xl font-bold text-slate-800">My Tasks</h1>
+          <h1 class="text-2xl font-bold text-slate-800">{{ greeting }}</h1>
           <p class="text-sm text-slate-500 mt-0.5">{{ stats.total }} tasks · {{ stats.done }} done</p>
         </div>
         <div class="flex items-center gap-2">
@@ -101,27 +134,32 @@ const hasFilters = computed(() => searchQ.value || filterStatus.value || filterP
           <button @click="showCreate = true" class="btn-md btn-primary">
             <PlusIcon class="w-4 h-4" />
             New Task
+            <kbd class="hidden sm:inline-block ml-1 text-[10px] font-mono bg-primary-500/30 px-1 py-0.5 rounded">N</kbd>
           </button>
         </div>
       </div>
 
-      <!-- Stats bar -->
+      <!-- Clickable stats bar -->
       <div class="grid grid-cols-3 gap-3 mb-6">
-        <div v-for="s in [
-          { label: 'Pending',     value: stats.pending,     color: 'text-slate-600 bg-slate-100' },
-          { label: 'In Progress', value: stats.in_progress, color: 'text-indigo-600 bg-indigo-50' },
-          { label: 'Done',        value: stats.done,        color: 'text-green-600  bg-green-50' },
-        ]" :key="s.label" class="card p-4 flex items-center gap-3">
+        <button v-for="s in [
+          { label: 'Pending',     value: stats.pending,     status: 'pending' as Status,     color: 'text-slate-600 bg-slate-100', active: 'ring-2 ring-slate-400' },
+          { label: 'In Progress', value: stats.in_progress, status: 'in_progress' as Status, color: 'text-indigo-600 bg-indigo-50', active: 'ring-2 ring-indigo-400' },
+          { label: 'Done',        value: stats.done,        status: 'done' as Status,        color: 'text-green-600  bg-green-50',  active: 'ring-2 ring-green-400' },
+        ]" :key="s.label"
+          @click="filterByStatus(s.status)"
+          :class="['card p-4 flex items-center gap-3 cursor-pointer hover:shadow-md transition-all duration-150 text-left',
+                    filterStatus === s.status ? s.active : '']"
+        >
           <div :class="['w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold', s.color]">
             {{ s.value }}
           </div>
           <div>
             <p class="text-xs text-slate-500">{{ s.label }}</p>
           </div>
-        </div>
+        </button>
       </div>
 
-      <!-- Search + Filters -->
+      <!-- Search + Filters + Sort -->
       <div class="flex items-center gap-2 mb-4">
         <div class="relative flex-1">
           <MagnifyingGlassIcon class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -138,6 +176,11 @@ const hasFilters = computed(() => searchQ.value || filterStatus.value || filterP
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
+        </select>
+        <select v-model="sortBy" class="input w-32">
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="priority">Priority</option>
         </select>
         <button v-if="hasFilters" @click="clearFilters" class="btn-ghost btn-md text-slate-500">
           <XMarkIcon class="w-4 h-4" />

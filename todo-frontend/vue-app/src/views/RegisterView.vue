@@ -41,7 +41,9 @@ async function submit() {
     notif.success('Account created! Welcome to Taskly.')
     router.push('/todos')
   } catch (e: any) {
-    error.value = e.response?.data?.message ?? 'Registration failed. Try a different email.'
+    error.value = e.response?.data?.error === 'email already registered'
+      ? 'This email is already registered. Try signing in instead.'
+      : 'Registration failed. Please try again.'
   } finally { loading.value = false }
 }
 </script>

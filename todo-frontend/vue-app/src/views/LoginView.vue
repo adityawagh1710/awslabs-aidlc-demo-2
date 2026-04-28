@@ -26,7 +26,11 @@ async function submit() {
     notif.success('Welcome back!')
     router.push('/todos')
   } catch (e: any) {
-    error.value = e.response?.data?.message ?? 'Invalid email or password.'
+    error.value = e.response?.data?.error === 'unauthorized'
+      ? 'Invalid email or password.'
+      : e.response?.data?.error === 'too many requests'
+      ? 'Too many attempts. Please try again later.'
+      : 'Something went wrong. Please try again.'
   } finally { loading.value = false }
 }
 </script>
