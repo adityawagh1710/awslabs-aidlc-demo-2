@@ -18,4 +18,7 @@ export const authApi = {
 
   verifyMfa: (code: string) =>
     api.post('/auth/mfa/verify', { code }),
+
+  disableMfa: (code: string) =>
+    api.post('/auth/mfa/disable', { code }),
 }

@@ -27,8 +27,8 @@ var (
 )
 
 const (
-	accessTokenTTL  = time.Hour
-	refreshTokenTTL = 30 * 24 * time.Hour
+	accessTokenTTL   = time.Hour
+	refreshTokenTTL  = 30 * 24 * time.Hour
 	maxLoginAttempts = 5
 	lockoutDuration  = 15 * time.Minute
 )
@@ -45,6 +45,7 @@ type AuthService interface {
 	Logout(ctx context.Context, userID, accessToken, refreshToken string) error
 	EnrollMFA(ctx context.Context, userID string) (secret, qrURL string, err error)
 	VerifyMFA(ctx context.Context, userID, code string) error
+	DisableMFA(ctx context.Context, userID, code string) error
 }
 
 type authService struct {
@@ -156,6 +157,21 @@ func (s *authService) VerifyMFA(ctx context.Context, userID, code string) error 
 		return ErrInvalidMFA
 	}
 	return s.userRepo.UpdateMFASecret(ctx, user.ID, *user.MFASecret, true)
+}
+
+func (s *authService) DisableMFA(ctx context.Context, userID, code string) error {
+	user, err := s.userRepo.FindUserByID(ctx, uuid.MustParse(userID))
+	if err != nil {
+		return err
+	}
+	if !user.MFAEnabled || user.MFASecret == nil {
+		return nil // already disabled
+	}
+	// Require a valid TOTP code to disable — prevents unauthorized disabling
+	if !totp.Validate(code, *user.MFASecret) {
+		return ErrInvalidMFA
+	}
+	return s.userRepo.UpdateMFASecret(ctx, user.ID, "", false)
 }
 
 // issueTokenPair creates a new access + refresh token pair.

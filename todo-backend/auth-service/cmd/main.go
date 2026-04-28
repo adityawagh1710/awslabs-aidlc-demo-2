@@ -92,6 +92,7 @@ func main() {
 	auth.Post("/logout", middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb), authHandler.Logout)
 	auth.Post("/mfa/enroll", middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb), authHandler.MFAEnroll)
 	auth.Post("/mfa/verify", middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb), authHandler.MFAVerify)
+	auth.Post("/mfa/disable", middleware.JWTAuth(os.Getenv("JWT_SECRET"), rdb), authHandler.MFADisable)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

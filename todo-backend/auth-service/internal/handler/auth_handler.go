@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"github.com/gofiber/fiber/v2"
 	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/todo-app/auth-service/internal/service"
 )
 
@@ -127,6 +127,21 @@ func (h *AuthHandler) MFAVerify(c *fiber.Ctx) error {
 	}
 	userID := c.Locals("userID").(string)
 	if err := h.svc.VerifyMFA(c.Context(), userID, req.Code); err != nil {
+		return fiber.ErrUnauthorized
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func (h *AuthHandler) MFADisable(c *fiber.Ctx) error {
+	var req mfaVerifyRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.ErrUnprocessableEntity
+	}
+	if err := validate.Struct(req); err != nil {
+		return fiber.ErrUnprocessableEntity
+	}
+	userID := c.Locals("userID").(string)
+	if err := h.svc.DisableMFA(c.Context(), userID, req.Code); err != nil {
 		return fiber.ErrUnauthorized
 	}
 	return c.SendStatus(fiber.StatusOK)

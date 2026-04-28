@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ShieldCheckIcon, UserCircleIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import { ShieldCheckIcon, UserCircleIcon, QrCodeIcon, XCircleIcon } from '@heroicons/vue/24/outline'
 import QRCode from 'qrcode'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AppSpinner from '@/components/ui/AppSpinner.vue'
@@ -11,18 +11,19 @@ import { authApi } from '@/api/auth'
 const auth  = useAuthStore()
 const notif = useNotifStore()
 
-const mfaLoading = ref(false)
-const mfaQRData  = ref('')   // data:image/png;base64 URI
-const mfaSecret  = ref('')
-const mfaCode    = ref('')
-const mfaStep    = ref<'idle' | 'scan' | 'done'>(auth.mfaEnabled ? 'done' : 'idle')
+const mfaLoading    = ref(false)
+const mfaQRData     = ref('')
+const mfaSecret     = ref('')
+const mfaCode       = ref('')
+const disableCode   = ref('')
+const showDisable   = ref(false)
+const mfaStep       = ref<'idle' | 'scan' | 'done'>(auth.mfaEnabled ? 'done' : 'idle')
 
 async function startMfa() {
   mfaLoading.value = true
   try {
     const { data } = await authApi.enrollMfa()
     mfaSecret.value = data.secret
-    // Generate QR code image from the otpauth:// URI
     mfaQRData.value = await QRCode.toDataURL(data.qr_url, { width: 200, margin: 2 })
     mfaStep.value   = 'scan'
   } catch { notif.error('Could not start MFA setup') }
@@ -35,8 +36,23 @@ async function verifyMfa() {
   try {
     await authApi.verifyMfa(mfaCode.value)
     mfaStep.value = 'done'
+    mfaCode.value = ''
     auth.setMfaEnabled(true)
     notif.success('MFA enabled successfully!')
+  } catch { notif.error('Invalid code. Please try again.') }
+  finally { mfaLoading.value = false }
+}
+
+async function disableMfa() {
+  if (disableCode.value.length !== 6) return
+  mfaLoading.value = true
+  try {
+    await authApi.disableMfa(disableCode.value)
+    mfaStep.value = 'idle'
+    disableCode.value = ''
+    showDisable.value = false
+    auth.setMfaEnabled(false)
+    notif.success('MFA disabled.')
   } catch { notif.error('Invalid code. Please try again.') }
   finally { mfaLoading.value = false }
 }
@@ -69,7 +85,7 @@ async function verifyMfa() {
         </div>
         <div class="px-6 py-5">
 
-          <!-- Idle -->
+          <!-- Idle: not enabled -->
           <div v-if="mfaStep === 'idle'">
             <p class="text-sm text-slate-500 mb-4">
               Add an extra layer of security by enabling TOTP-based 2FA.
@@ -105,12 +121,36 @@ async function verifyMfa() {
             </button>
           </div>
 
-          <!-- Done -->
-          <div v-else class="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-100">
-            <ShieldCheckIcon class="w-6 h-6 text-green-600 shrink-0" />
-            <div>
-              <p class="text-sm font-semibold text-green-800">2FA is enabled</p>
-              <p class="text-xs text-green-600">Your account is protected with TOTP authentication.</p>
+          <!-- Done: MFA enabled -->
+          <div v-else class="space-y-4">
+            <div class="flex items-center gap-3 p-4 bg-green-50 rounded-xl border border-green-100">
+              <ShieldCheckIcon class="w-6 h-6 text-green-600 shrink-0" />
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-green-800">2FA is enabled</p>
+                <p class="text-xs text-green-600">Your account is protected with TOTP authentication.</p>
+              </div>
+            </div>
+
+            <!-- Disable 2FA -->
+            <div v-if="!showDisable">
+              <button @click="showDisable = true" class="btn-md btn-ghost text-red-500 hover:bg-red-50">
+                <XCircleIcon class="w-4 h-4" />
+                Disable 2FA
+              </button>
+            </div>
+            <div v-else class="p-4 rounded-xl border border-red-100 bg-red-50 space-y-3">
+              <p class="text-sm text-red-700">Enter your current authenticator code to confirm disabling 2FA.</p>
+              <input v-model="disableCode" type="text" inputmode="numeric" maxlength="6"
+                class="input text-center text-xl tracking-[0.4em] font-mono" placeholder="000000"
+                @keyup.enter="disableMfa" />
+              <div class="flex gap-2">
+                <button @click="showDisable = false; disableCode = ''" class="btn-md btn-secondary flex-1">Cancel</button>
+                <button @click="disableMfa" class="btn-md bg-red-600 text-white hover:bg-red-700 flex-1"
+                  :disabled="mfaLoading || disableCode.length !== 6">
+                  <AppSpinner v-if="mfaLoading" size="sm" />
+                  Confirm disable
+                </button>
+              </div>
             </div>
           </div>
 
