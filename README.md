@@ -1,4 +1,4 @@
-# Taskly — Production-Grade Todo Application
+# Taskly
 
 A full-stack, multi-user todo application built with Go microservices and a Vue 3 frontend. Designed for production: JWT authentication with MFA, full-text search, real-time notifications, file attachments, recurring tasks, and a complete test suite.
 
